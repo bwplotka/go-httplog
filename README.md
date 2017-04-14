@@ -1,6 +1,6 @@
 # go-httplog
 
-[![Build Status](https://travis-ci.org/Bplotka/go-httplog.svg?branch=master)](https://travis-ci.org/Bplotka/go-httplog)
+[![Build Status](https://travis-ci.org/Bplotka/go-httplog.svg?branch=master)](https://travis-ci.org/Bplotka/go-httplog) [![Go Report Card](https://goreportcard.com/badge/github.com/Bplotka/go-httplog)](https://goreportcard.com/report/github.com/Bplotka/go-httplog)
 
 Robust, smart logger for Golang http request/response.
 
