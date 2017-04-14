@@ -1,3 +1,5 @@
+// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+
 package httplog
 
 import (
@@ -41,6 +43,7 @@ type Logger struct {
 	cfg    Config
 }
 
+// New constructs new httplog Logger.
 func New(logger FieldLogger, cfg Config) *Logger {
 	timeNow = time.Now
 	return &Logger{
@@ -66,6 +69,7 @@ func RegisterMiddleware(logger FieldLogger, cfg Config) func(http.Handler) http.
 	}
 }
 
+// RequestHandler handles request log entry. Should be places at before serving response.
 func (l *Logger) RequestHandler() func(w http.ResponseWriter, r *http.Request) {
 	if len(l.cfg.RequestFields) == 0 {
 		return func(_ http.ResponseWriter, _ *http.Request) {}
@@ -89,6 +93,8 @@ func (l *Logger) RequestHandler() func(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// WrapResponse wraps ResponseWriter. It is the only way to get details about response without including custom code
+// in user handlers.
 func (l *Logger) WrapResponse(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
 	return &responseLogger{
 		writer:  w,
@@ -103,16 +109,26 @@ func (l *Logger) WrapResponse(w http.ResponseWriter, r *http.Request) http.Respo
 type RequestField string
 
 const (
-	ReqTimeField  = RequestField("req_time")
-	IDField       = RequestField("req_id")
+	// ReqTimeField contains time of request receiving.
+	ReqTimeField = RequestField("req_time")
+	// IDField contains ID of the request.
+	IDField = RequestField("req_id")
+	// RemoteIPField contains request remote IP.
 	RemoteIPField = RequestField("req_remote_ip")
-	HostField     = RequestField("req_host")
-	URIField      = RequestField("req_uri")
-	ReqArgsField  = RequestField("req_args")
-	MethodField   = RequestField("req_method")
-	PathField     = RequestField("req_path")
-	BytesInField  = RequestField("req_bytes_in")
-	AuthField     = RequestField("req_auth_header")
+	// HostField contains request host.
+	HostField = RequestField("req_host")
+	// URIField contains full URI of the request.
+	URIField = RequestField("req_uri")
+	// ReqArgsField contains request arguments which are compacted (only keys).
+	ReqArgsField = RequestField("req_args")
+	// MethodField contains request method.
+	MethodField = RequestField("req_method")
+	// PathField contains path of request.
+	PathField = RequestField("req_path")
+	// BytesInField contains size of request in bytes.
+	BytesInField = RequestField("req_bytes_in")
+	// AuthField contains auth header for request.
+	AuthField = RequestField("req_auth_header")
 )
 
 // DefaultRequestFields is a list for recommended configuration of request fields.
@@ -133,12 +149,19 @@ var DefaultRequestFields = []RequestField{
 type ResponseField string
 
 const (
-	StatusField       = ResponseField("res_status")
-	BytesOutField     = ResponseField("res_bytes_out")
-	ResTimeField      = ResponseField("res_time")
-	ContentTypeField  = ResponseField("res_content_type")
-	LocationField     = ResponseField("res_location")
+	// StatusField contains status code.
+	StatusField = ResponseField("res_status")
+	// BytesOutField contains size of response in bytes.
+	BytesOutField = ResponseField("res_bytes_out")
+	// ResTimeField contains time returning response or redirecting.
+	ResTimeField = ResponseField("res_time")
+	// ContentTypeField contains content-type of the response.
+	ContentTypeField = ResponseField("res_content_type")
+	// LocationField contains full redirection URL in case of redirection response.
+	LocationField = ResponseField("res_location")
+	// LocationArgsField contains arguments of redirection URL in case of redirection response in compacted form (only keys).
 	LocationArgsField = ResponseField("res_location_args")
+	// LocationHostField contains host of redirection URL in case of redirection response.
 	LocationHostField = ResponseField("res_location_host")
 )
 
