@@ -1,5 +1,7 @@
 # go-httplog
 
+[![Build Status](https://travis-ci.org/Bplotka/go-httplog.svg?branch=master)](https://travis-ci.org/Bplotka/go-httplog)
+
 Robust, smart logger for Golang http request/response.
 
 It provides way to log in details every request and response with chosen fields. It
@@ -12,24 +14,24 @@ It fits into standard `net/http` middleware (`http.Handler`) pattern, but comes 
 It comes with bunch of configurable fields. Not exhausting list of these:
 
 ```
-	ReqTimeField  = RequestField("req_time")
-	IDField       = RequestField("req_id")
-	RemoteIPField = RequestField("req_remote_ip")
-	HostField     = RequestField("req_host")
-	URIField      = RequestField("req_uri")
-	ReqArgsField  = RequestField("req_args")
-	MethodField   = RequestField("req_method")
-	PathField     = RequestField("req_path")
-	BytesInField  = RequestField("req_bytes_in")
-	AuthField     = RequestField("req_auth_header")
-	
-	StatusField       = ResponseField("res_status")
-	BytesOutField     = ResponseField("res_bytes_out")
-	ResTimeField      = ResponseField("res_time")
-	ContentTypeField  = ResponseField("res_content_type")
-	LocationField     = ResponseField("res_location")
-	LocationArgsField = ResponseField("res_location_args")
-	LocationHostField = ResponseField("res_location_host")
+ReqTimeField  = RequestField("req_time")
+IDField       = RequestField("req_id")
+RemoteIPField = RequestField("req_remote_ip")
+HostField     = RequestField("req_host")
+URIField      = RequestField("req_uri")
+ReqArgsField  = RequestField("req_args")
+MethodField   = RequestField("req_method")
+PathField     = RequestField("req_path")
+BytesInField  = RequestField("req_bytes_in")
+AuthField     = RequestField("req_auth_header")
+
+StatusField       = ResponseField("res_status")
+BytesOutField     = ResponseField("res_bytes_out")
+ResTimeField      = ResponseField("res_time")
+ContentTypeField  = ResponseField("res_content_type")
+LocationField     = ResponseField("res_location")
+LocationArgsField = ResponseField("res_location_args")
+LocationHostField = ResponseField("res_location_host")
 ```
 
 ## Example:

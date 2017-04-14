@@ -8,43 +8,99 @@ import (
 	"time"
 )
 
+// For unit test only.
+var timeNow func() time.Time
+
 // Fields type, used to pass to `WithFields`.
 type Fields map[string]interface{}
 
 // The FieldLogger interface generalizes structured logging used by httplog.
 type FieldLogger interface {
 	WithFields(fields Fields) FieldLogger
-	WithError(err error) FieldLogger
-
 	Log(args ...interface{})
 }
 
+// Config is a configuration for httplog.
 type Config struct {
+	// RequestFields specifies request fields that should be logged when request is received (before server handling).
 	RequestFields []RequestField
 
-	ResponseFields    []ResponseField
+	// ResponseFields specifies response fields that should be logged when response is returned/redirected
+	// (right after server handling).
+	ResponseFields []ResponseField
+	// ResponseReqFields specifies request fields that should be logged when response is returned/redirected
+	// (right after server handling). It is useful if you want to log only once per request. (common logging technique)
 	ResponseReqFields []RequestField
 }
 
+// Logger is an instance for httplog to register middleware and wrap response.
 type Logger struct {
 	// Logger to use internally.
 	// TODO(bplotka): Add default FieldLogger (using Bplotka/sgl e.g)
 	logger FieldLogger
 	cfg    Config
-
-	timeNow func() time.Time
 }
 
 func New(logger FieldLogger, cfg Config) *Logger {
+	timeNow = time.Now
 	return &Logger{
-		logger:  logger,
-		cfg:     cfg,
-		timeNow: time.Now,
+		logger: logger,
+		cfg:    cfg,
 	}
 }
 
+// RegisterMiddleware registers handler that will log request at the beginning and served response at the request end.
+func RegisterMiddleware(logger FieldLogger, cfg Config) func(http.Handler) http.Handler {
+	l := New(logger, cfg)
+
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Log specified RequestFields now.
+			l.RequestHandler()(w, r)
+			h.ServeHTTP(
+				// Log specified ResponseFields and ResponseReqFields on Response Write or Redirect.
+				l.WrapResponse(w, r),
+				r,
+			)
+		})
+	}
+}
+
+func (l *Logger) RequestHandler() func(w http.ResponseWriter, r *http.Request) {
+	if len(l.cfg.RequestFields) == 0 {
+		return func(_ http.ResponseWriter, _ *http.Request) {}
+	}
+
+	return func(_ http.ResponseWriter, r *http.Request) {
+		f := Fields{}
+		for _, field := range l.cfg.RequestFields {
+			v := field.computeValue(timeNow, r)
+			if v == "" {
+				continue
+			}
+			f[string(field)] = v
+		}
+
+		logger := l.logger
+		if len(f) != 0 {
+			logger = logger.WithFields(f)
+		}
+		logger.Log("Received HTTP request")
+	}
+}
+
+func (l *Logger) WrapResponse(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
+	return &responseLogger{
+		writer:  w,
+		req:     r,
+		cfg:     l.cfg,
+		logger:  l.logger,
+		timeNow: timeNow,
+	}
+}
+
+// RequestField is a log field that can be deducted from http.Request.
 type RequestField string
-type ResponseField string
 
 const (
 	ReqTimeField  = RequestField("req_time")
@@ -59,6 +115,7 @@ const (
 	AuthField     = RequestField("req_auth_header")
 )
 
+// DefaultRequestFields is a list for recommended configuration of request fields.
 var DefaultRequestFields = []RequestField{
 	ReqTimeField,
 	IDField,
@@ -71,6 +128,10 @@ var DefaultRequestFields = []RequestField{
 	AuthField,
 }
 
+// ResponseField is a log field that can be deducted from response.
+// It is done by wrapping http.ResponseWriter.
+type ResponseField string
+
 const (
 	StatusField       = ResponseField("res_status")
 	BytesOutField     = ResponseField("res_bytes_out")
@@ -81,7 +142,8 @@ const (
 	LocationHostField = ResponseField("res_location_host")
 )
 
-var DefaultResponseField = []ResponseField{
+// DefaultResponseFields is a list for recommended configuration of response fields.
+var DefaultResponseFields = []ResponseField{
 	StatusField,
 	BytesOutField,
 	ResTimeField,
@@ -90,17 +152,19 @@ var DefaultResponseField = []ResponseField{
 	LocationHostField,
 }
 
+// DefaultReqResConfig is configuration for logging one entry when request is received and one when response is written.
 func DefaultReqResConfig() Config {
 	return Config{
 		RequestFields:  DefaultRequestFields,
-		ResponseFields: DefaultResponseField,
+		ResponseFields: DefaultResponseFields,
 	}
 }
 
+// DefaultResponseOnlyConfig is configuration for logging only an entry when response is written.
 func DefaultResponseOnlyConfig() Config {
 	return Config{
 		ResponseReqFields: DefaultRequestFields,
-		ResponseFields:    DefaultResponseField,
+		ResponseFields:    DefaultResponseFields,
 	}
 }
 
@@ -123,7 +187,7 @@ func formatCompactArgs(argQuery string) string {
 	return strings.Join(argsOnly, "&")
 }
 
-func (f RequestField) ComputeValue(timeNow func() time.Time, req *http.Request) string {
+func (f RequestField) computeValue(timeNow func() time.Time, req *http.Request) string {
 	switch f {
 	case ReqTimeField:
 		return timeNow().Format(time.RFC3339)
@@ -169,7 +233,7 @@ func (f RequestField) ComputeValue(timeNow func() time.Time, req *http.Request) 
 	}
 }
 
-func (f ResponseField) ComputeValue(timeNow func() time.Time, res *responseLogger) string {
+func (f ResponseField) computeValue(timeNow func() time.Time, res *responseLogger) string {
 	switch f {
 	case StatusField:
 		return fmt.Sprintf("%d", res.status)
@@ -195,29 +259,6 @@ func (f ResponseField) ComputeValue(timeNow func() time.Time, res *responseLogge
 		return splittedQuery[0]
 	default:
 		return "not supported"
-	}
-}
-
-func (l *Logger) RequestLogger() func(w http.ResponseWriter, r *http.Request) {
-	if len(l.cfg.RequestFields) == 0 {
-		return func(_ http.ResponseWriter, _ *http.Request) {}
-	}
-
-	return func(_ http.ResponseWriter, r *http.Request) {
-		f := Fields{}
-		for _, field := range l.cfg.RequestFields {
-			v := field.ComputeValue(l.timeNow, r)
-			if v == "" {
-				continue
-			}
-			f[string(field)] = v
-		}
-
-		logger := l.logger
-		if len(f) != 0 {
-			logger = logger.WithFields(f)
-		}
-		logger.Log("Received HTTP request")
 	}
 }
 
@@ -294,7 +335,7 @@ func (r *responseLogger) log(b []byte) {
 
 	f := Fields{}
 	for _, field := range r.cfg.ResponseReqFields {
-		v := field.ComputeValue(r.timeNow, r.req)
+		v := field.computeValue(r.timeNow, r.req)
 		if v == "" {
 			continue
 		}
@@ -302,7 +343,7 @@ func (r *responseLogger) log(b []byte) {
 	}
 
 	for _, field := range r.cfg.ResponseFields {
-		v := field.ComputeValue(r.timeNow, r)
+		v := field.computeValue(r.timeNow, r)
 		if v == "" {
 			continue
 		}
@@ -318,31 +359,4 @@ func (r *responseLogger) log(b []byte) {
 	} else {
 		logger.Log("Responding to HTTP request")
 	}
-}
-
-type handler struct{}
-
-func (l *Logger) ResponseMiddleware() func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(
-				l.WrapResponse(w, r),
-				r,
-			)
-		})
-	}
-}
-
-func (l *Logger) WrapResponse(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
-	return &responseLogger{
-		writer:  w,
-		req:     r,
-		cfg:     l.cfg,
-		logger:  l.logger,
-		timeNow: l.timeNow,
-	}
-}
-
-// ResponseLogger returns standard "middleware" pattern.
-func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }

@@ -25,11 +25,13 @@ func testRequest(url string) (*http.Request, error) {
 
 func TestLogger_HTTPHandler_EmptyConfig(t *testing.T) {
 	mLogger := new(MockFieldLogger)
-	l := New(mLogger, Config{})
+	l := &Logger{
+		logger: mLogger,
+	}
 
 	req, err := testRequest("")
 	require.NoError(t, err)
-	l.RequestLogger()(nil, req)
+	l.RequestHandler()(nil, req)
 
 	mLogger.AssertExpectations(t)
 }
@@ -46,14 +48,17 @@ func TestLogger_HTTPHandler_RequestFieldsLogged(t *testing.T) {
 	}).Return(mLogger)
 	mLogger.On("Log", []interface{}{"Received HTTP request"}).Once()
 
-	l := New(mLogger, DefaultReqResConfig())
-	l.timeNow = func() time.Time {
+	l := &Logger{
+		logger: mLogger,
+		cfg:    DefaultReqResConfig(),
+	}
+	timeNow = func() time.Time {
 		return now
 	}
 
 	req, err := testRequest("")
 	require.NoError(t, err)
-	l.RequestLogger()(nil, req)
+	l.RequestHandler()(nil, req)
 
 	mLogger.AssertExpectations(t)
 }
@@ -69,12 +74,9 @@ func TestLogger_HTTPHandler_ResponseFieldsLogged(t *testing.T) {
 	}).Return(mLogger)
 	mLogger.On("Log", []interface{}{"Responding to HTTP request"}).Once()
 
-	l := New(mLogger, DefaultReqResConfig())
-	l.timeNow = func() time.Time {
-		return now
-	}
-
-	srv := httptest.NewServer(l.ResponseMiddleware()(
+	srv := httptest.NewServer(RegisterMiddleware(mLogger, Config{
+		ResponseFields: DefaultResponseFields,
+	})(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ioutil.ReadAll(r.Body)
 
@@ -93,8 +95,11 @@ func TestLogger_HTTPHandler_ResponseFieldsLogged(t *testing.T) {
 			require.NoError(t, err)
 		}),
 	))
-
 	defer srv.Close()
+
+	timeNow = func() time.Time {
+		return now
+	}
 
 	req, err := testRequest(srv.URL)
 	require.NoError(t, err)
@@ -119,12 +124,9 @@ func TestLogger_HTTPHandler_RedirectFieldsLogged(t *testing.T) {
 	}).Return(mLogger)
 	mLogger.On("Log", []interface{}{"Redirecting HTTP request"}).Once()
 
-	l := New(mLogger, DefaultReqResConfig())
-	l.timeNow = func() time.Time {
-		return now
-	}
-
-	srv := httptest.NewServer(l.ResponseMiddleware()(
+	srv := httptest.NewServer(RegisterMiddleware(mLogger, Config{
+		ResponseFields: DefaultResponseFields,
+	})(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ioutil.ReadAll(r.Body)
 
@@ -132,8 +134,11 @@ func TestLogger_HTTPHandler_RedirectFieldsLogged(t *testing.T) {
 			http.Redirect(w, r, u, 302)
 		}),
 	))
-
 	defer srv.Close()
+
+	timeNow = func() time.Time {
+		return now
+	}
 
 	req, err := testRequest(srv.URL)
 	require.NoError(t, err)
