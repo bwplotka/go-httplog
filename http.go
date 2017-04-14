@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -20,56 +19,11 @@ type FieldLogger interface {
 	Log(args ...interface{})
 }
 
-type HTTPHandler func(w http.ResponseWriter, r *http.Request)
-
 type Config struct {
 	RequestFields []RequestField
 
 	ResponseFields    []ResponseField
 	ResponseReqFields []RequestField
-}
-
-func DefaultReqResConfig() Config {
-	return Config{
-		RequestFields: []RequestField{
-			ReqTimeField,
-			IDField,
-			RemoteIPField,
-			HostField,
-			ReqArgsField,
-			MethodField,
-			PathField,
-			BytesInField,
-			AuthField,
-		},
-		ResponseFields: []ResponseField{
-			StatusField,
-			BytesOutField,
-			ContentTypeField,
-		},
-	}
-}
-
-func DefaultResponseOnlyConfig() Config {
-	return Config{
-		ResponseReqFields: []RequestField{
-			ReqTimeField,
-			IDField,
-			RemoteIPField,
-			HostField,
-			URIField,
-			MethodField,
-			PathField,
-			BytesInField,
-			AuthField,
-		},
-		ResponseFields: []ResponseField{
-			StatusField,
-			BytesOutField,
-			ContentTypeField,
-			ResTimeField,
-		},
-	}
 }
 
 type Logger struct {
@@ -103,12 +57,71 @@ const (
 	PathField     = RequestField("req_path")
 	BytesInField  = RequestField("req_bytes_in")
 	AuthField     = RequestField("req_auth_header")
-
-	StatusField      = ResponseField("res_status")
-	BytesOutField    = ResponseField("res_bytes_out")
-	ResTimeField     = ResponseField("res_time")
-	ContentTypeField = ResponseField("res_content_type")
 )
+
+var DefaultRequestFields = []RequestField{
+	ReqTimeField,
+	IDField,
+	RemoteIPField,
+	HostField,
+	ReqArgsField,
+	MethodField,
+	PathField,
+	BytesInField,
+	AuthField,
+}
+
+const (
+	StatusField       = ResponseField("res_status")
+	BytesOutField     = ResponseField("res_bytes_out")
+	ResTimeField      = ResponseField("res_time")
+	ContentTypeField  = ResponseField("res_content_type")
+	LocationField     = ResponseField("res_location")
+	LocationArgsField = ResponseField("res_location_args")
+	LocationHostField = ResponseField("res_location_host")
+)
+
+var DefaultResponseField = []ResponseField{
+	StatusField,
+	BytesOutField,
+	ResTimeField,
+	ContentTypeField,
+	LocationArgsField,
+	LocationHostField,
+}
+
+func DefaultReqResConfig() Config {
+	return Config{
+		RequestFields:  DefaultRequestFields,
+		ResponseFields: DefaultResponseField,
+	}
+}
+
+func DefaultResponseOnlyConfig() Config {
+	return Config{
+		ResponseReqFields: DefaultRequestFields,
+		ResponseFields:    DefaultResponseField,
+	}
+}
+
+func formatCompactArgs(argQuery string) string {
+	argElems := strings.Split(argQuery, "&")
+	argsOnly := []string{}
+	for _, argElem := range argElems {
+		a := strings.Split(argElem, "=")
+		if len(a) == 0 || a[0] == "" {
+			continue
+		}
+		argsOnly = append(argsOnly, a[0])
+	}
+	if len(argsOnly) == 0 {
+		return ""
+	}
+	for i := range argsOnly {
+		argsOnly[i] = fmt.Sprintf("%s=...", argsOnly[i])
+	}
+	return strings.Join(argsOnly, "&")
+}
 
 func (f RequestField) ComputeValue(timeNow func() time.Time, req *http.Request) string {
 	switch f {
@@ -131,23 +144,10 @@ func (f RequestField) ComputeValue(timeNow func() time.Time, req *http.Request) 
 	case URIField:
 		return req.RequestURI
 	case ReqArgsField:
+		// Parse all form values.
 		req.FormValue("")
-		argElems := strings.Split(req.Form.Encode(), "&")
-		argsOnly := []string{}
-		for _, argElem := range argElems {
-			a := strings.Split(argElem, "=")
-			if len(a) == 0 {
-				continue
-			}
-			argsOnly = append(argsOnly, a[0])
-		}
-		if len(argsOnly) == 0 {
-			return ""
-		}
-		for i, _ := range argsOnly {
-			argsOnly[i] = fmt.Sprintf("%s=(...)", argsOnly[i])
-		}
-		return strings.Join(argsOnly, "&")
+
+		return formatCompactArgs(req.Form.Encode())
 	case MethodField:
 		return req.Method
 	case PathField:
@@ -169,22 +169,36 @@ func (f RequestField) ComputeValue(timeNow func() time.Time, req *http.Request) 
 	}
 }
 
-func (f ResponseField) ComputeValue(timeNow func() time.Time, res *http.Response) string {
+func (f ResponseField) ComputeValue(timeNow func() time.Time, res *responseLogger) string {
 	switch f {
 	case StatusField:
-		return res.Status
+		return fmt.Sprintf("%d", res.status)
 	case BytesOutField:
-		return strconv.FormatInt(res.ContentLength, 10)
+		return fmt.Sprintf("%d", res.size)
 	case ResTimeField:
 		return timeNow().Format(time.RFC3339)
 	case ContentTypeField:
-		return res.Header.Get("Content-Type")
+		return res.Header().Get("Content-Type")
+	case LocationField:
+		return res.Header().Get("Location")
+	case LocationArgsField:
+		splittedQuery := strings.Split(res.Header().Get("Location"), "?")
+		if len(splittedQuery) != 2 {
+			return ""
+		}
+		return formatCompactArgs(splittedQuery[1])
+	case LocationHostField:
+		splittedQuery := strings.Split(res.Header().Get("Location"), "?")
+		if len(splittedQuery) < 1 {
+			return ""
+		}
+		return splittedQuery[0]
 	default:
 		return "not supported"
 	}
 }
 
-func (l *Logger) RequestLogger() HTTPHandler {
+func (l *Logger) RequestLogger() func(w http.ResponseWriter, r *http.Request) {
 	if len(l.cfg.RequestFields) == 0 {
 		return func(_ http.ResponseWriter, _ *http.Request) {}
 	}
@@ -198,36 +212,137 @@ func (l *Logger) RequestLogger() HTTPHandler {
 			}
 			f[string(field)] = v
 		}
-		if len(f) == 0 {
-			return
+
+		logger := l.logger
+		if len(f) != 0 {
+			logger = logger.WithFields(f)
 		}
-		l.logger.WithFields(f).Log("Received HTTP request")
+		logger.Log("Received HTTP request")
 	}
 }
 
-func (l *Logger) ResponseLogger() HTTPHandler {
-	return func(_ http.ResponseWriter, r *http.Request) {
-		f := Fields{}
-		for _, field := range l.cfg.ResponseReqFields {
-			v := field.ComputeValue(l.timeNow, r)
-			if v == "" {
-				continue
-			}
-			f[string(field)] = v
-		}
+// responseLogger is light wrapper of ResponseWriter and Flusher to support logging on response.
+type responseLogger struct {
+	writer    http.ResponseWriter
+	req       *http.Request
+	cfg       Config
+	logger    FieldLogger
+	status    int
+	size      int64
+	committed bool
+	logged    bool
 
-		for _, field := range l.cfg.ResponseFields {
-			v := field.ComputeValue(l.timeNow, r.Response)
-			if v == "" {
-				continue
-			}
-			f[string(field)] = v
-		}
+	timeNow func() time.Time
+}
 
-		if len(f) == 0 {
-			return
-		}
+// Header wraps writer Header method.
+// See [http.ResponseWriter](https://golang.org/pkg/net/http/#ResponseWriter)
+func (r *responseLogger) Header() http.Header {
+	return r.writer.Header()
+}
 
-		l.logger.WithFields(f).Log("Responding to HTTP request")
+// WriteHeader wraps writer WriteHeader method.
+// See [http.ResponseWriter](https://golang.org/pkg/net/http/#ResponseWriter)
+func (r *responseLogger) WriteHeader(code int) {
+	if r.committed {
+		return
 	}
+	r.status = code
+	r.writer.WriteHeader(code)
+	r.committed = true
+
+	if r.Header().Get("Location") != "" {
+		r.log([]byte{})
+	}
+}
+
+// Write wraps writer Write method.
+// See [http.ResponseWriter](https://golang.org/pkg/net/http/#ResponseWriter)
+func (r *responseLogger) Write(b []byte) (n int, err error) {
+	if !r.committed {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err = r.writer.Write(b)
+	r.size += int64(n)
+
+	r.log(b)
+	return
+}
+
+// parse Body into structured log entry in best effort manner and only for supported content type.
+func (r *responseLogger) parseBody(b []byte) FieldLogger {
+	switch r.Header().Get("Content-Type") {
+	case "application/json":
+		fallthrough
+	case "application/json;charset=UTF-8":
+		return r.parseJSON(b)
+	}
+	return r.logger
+}
+
+func (r *responseLogger) parseJSON(b []byte) FieldLogger {
+	// TODO(bplotka): Add best effort parse.
+	return r.logger
+}
+
+func (r *responseLogger) log(b []byte) {
+	if r.logged {
+		return
+	}
+	r.logged = true
+	logger := r.parseBody(b)
+
+	f := Fields{}
+	for _, field := range r.cfg.ResponseReqFields {
+		v := field.ComputeValue(r.timeNow, r.req)
+		if v == "" {
+			continue
+		}
+		f[string(field)] = v
+	}
+
+	for _, field := range r.cfg.ResponseFields {
+		v := field.ComputeValue(r.timeNow, r)
+		if v == "" {
+			continue
+		}
+		f[string(field)] = v
+	}
+
+	if len(f) != 0 {
+		logger = logger.WithFields(f)
+	}
+
+	if r.Header().Get("Location") != "" {
+		logger.Log("Redirecting HTTP request")
+	} else {
+		logger.Log("Responding to HTTP request")
+	}
+}
+
+type handler struct{}
+
+func (l *Logger) ResponseMiddleware() func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(
+				l.WrapResponse(w, r),
+				r,
+			)
+		})
+	}
+}
+
+func (l *Logger) WrapResponse(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
+	return &responseLogger{
+		writer:  w,
+		req:     r,
+		cfg:     l.cfg,
+		logger:  l.logger,
+		timeNow: l.timeNow,
+	}
+}
+
+// ResponseLogger returns standard "middleware" pattern.
+func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }

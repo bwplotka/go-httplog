@@ -12,6 +12,6 @@ func TestToHTTPFieldLogger_CanBeUsed(t *testing.T) {
 	l := logrus.New()
 	l.Out = ioutil.Discard
 
-	logger := ToHTTPFieldLogger(l)
-	logger.WithError(errors.New("error")).Debug("something.")
+	logger := ToHTTPFieldLoggerInfo(l)
+	logger.WithError(errors.New("error")).Log("something.")
 }
