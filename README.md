@@ -8,11 +8,9 @@ It provides way to log in details every request and response with chosen fields.
 requires any structured logger that fits under `httplog.FieldLogger` interface.
 
 It comes with useful integration with [logrus]("github.com/Sirupsen/logrus"), but it can be extend to use any logger.
-
 It fits into standard `net/http` middleware (`http.Handler`) pattern, but comes also with [echo]("github.com/labstack/echo") integration.
 
 It comes with bunch of configurable fields. Not exhausting list of these:
-
 ```
 ReqTimeField  = RequestField("req_time")
 IDField       = RequestField("req_id")
@@ -49,19 +47,15 @@ import (
 
 func main() {
     l := logrus.New()
-    httpLogger := httplog.New(
-        httplogrus.ToHTTPFieldLoggerDebug(l), // or ToHTTPFieldLoggerInfo if you want these logs to be in Info level.
-        httplog.DefaultReqResConfig(), // or httplog.DefaultResponseOnlyConfig() for only log line per response. 
-    )
     
     srv := http.Server{
-        Handler: httpLogger.ResponseMiddleware()(
+        Handler: httplog.RegisterMiddleware(
+            httplogrus.ToHTTPFieldLoggerDebug(l), // or ToHTTPFieldLoggerInfo if you want these logs to be in Info level.
+            httplog.DefaultReqResConfig(), // or httplog.DefaultResponseOnlyConfig() for only log line per response. 
+        )(
             http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                httpLogger.RequestLogger()(w, r)
-            
                 // Your handler here...
                 l.Info("Inside!")
-            
             }),
         ),
     }

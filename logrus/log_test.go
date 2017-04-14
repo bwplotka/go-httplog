@@ -1,10 +1,12 @@
+// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+
 package httplogrus
 
 import (
-	"errors"
 	"io/ioutil"
 	"testing"
 
+	"github.com/Bplotka/go-httplog"
 	"github.com/Sirupsen/logrus"
 )
 
@@ -13,5 +15,5 @@ func TestToHTTPFieldLogger_CanBeUsed(t *testing.T) {
 	l.Out = ioutil.Discard
 
 	logger := ToHTTPFieldLoggerInfo(l)
-	logger.WithError(errors.New("error")).Log("something.")
+	logger.WithFields(httplog.Fields{}).Log("something.")
 }
