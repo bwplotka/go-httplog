@@ -150,10 +150,10 @@ func TestLogger_HTTPHandler_RedirectFieldsLogged(t *testing.T) {
 }
 
 func TestFormatComactArgs(t *testing.T) {
-	u := `http://localhost/wrong_endpoint?arg1="arg1value"&arg2="arg2value"`
+	u := `http://localhost/wrong_endpoint?arg1="arg1value"&arg2="arg2valuelonglonglonglonglonglonglonglonglonglonglonglonglonglong"&arg3`
 	url, err := url.Parse(u)
 	require.NoError(t, err)
 
-	assert.Equal(t, "arg1=...&arg2=...", formatCompactArgs(url.RawQuery))
+	assert.Equal(t, `arg1="arg1value"&arg2="arg2valuelonglonglonglonglonglonglonglonglonglo...&arg3`, formatCompactArgs(url.RawQuery))
 
 }

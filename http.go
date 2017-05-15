@@ -1,5 +1,3 @@
-// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
-
 package httplog
 
 import (
@@ -119,8 +117,8 @@ const (
 	HostField = RequestField("req_host")
 	// URIField contains full URI of the request.
 	URIField = RequestField("req_uri")
-	// ReqArgsField contains request arguments which are compacted (only keys).
-	ReqArgsField = RequestField("req_args")
+	// CompactURIField contains request arguments which are compacted (only keys).
+	CompactURIField = RequestField("req_uri_compact")
 	// MethodField contains request method.
 	MethodField = RequestField("req_method")
 	// PathField contains path of request.
@@ -137,7 +135,7 @@ var DefaultRequestFields = []RequestField{
 	IDField,
 	RemoteIPField,
 	HostField,
-	ReqArgsField,
+	CompactURIField,
 	MethodField,
 	PathField,
 	BytesInField,
@@ -159,8 +157,8 @@ const (
 	ContentTypeField = ResponseField("res_content_type")
 	// LocationField contains full redirection URL in case of redirection response.
 	LocationField = ResponseField("res_location")
-	// LocationArgsField contains arguments of redirection URL in case of redirection response in compacted form (only keys).
-	LocationArgsField = ResponseField("res_location_args")
+	// LocationCompactArgsField contains arguments of redirection URL in case of redirection response in compacted form (only keys).
+	LocationCompactArgsField = ResponseField("res_location_compact")
 	// LocationHostField contains host of redirection URL in case of redirection response.
 	LocationHostField = ResponseField("res_location_host")
 )
@@ -171,7 +169,7 @@ var DefaultResponseFields = []ResponseField{
 	BytesOutField,
 	ResTimeField,
 	ContentTypeField,
-	LocationArgsField,
+	LocationCompactArgsField,
 	LocationHostField,
 }
 
@@ -191,23 +189,32 @@ func DefaultResponseOnlyConfig() Config {
 	}
 }
 
+const maxArgsChars = 48
+
 func formatCompactArgs(argQuery string) string {
 	argElems := strings.Split(argQuery, "&")
-	argsOnly := []string{}
+	var shortsArgsOnly []string
 	for _, argElem := range argElems {
 		a := strings.Split(argElem, "=")
-		if len(a) == 0 || a[0] == "" {
+		if len(a) == 1 {
+			shortsArgsOnly = append(shortsArgsOnly, a[0])
 			continue
 		}
-		argsOnly = append(argsOnly, a[0])
+
+		if len(a) < 2 || a[0] == "" {
+			continue
+		}
+
+		value := a[1]
+		if len(a[1]) > maxArgsChars {
+			value = fmt.Sprintf("%s...", a[1][0:maxArgsChars])
+		}
+		shortsArgsOnly = append(shortsArgsOnly, fmt.Sprintf("%s=%s", a[0], value))
 	}
-	if len(argsOnly) == 0 {
+	if len(shortsArgsOnly) == 0 {
 		return ""
 	}
-	for i := range argsOnly {
-		argsOnly[i] = fmt.Sprintf("%s=...", argsOnly[i])
-	}
-	return strings.Join(argsOnly, "&")
+	return strings.Join(shortsArgsOnly, "&")
 }
 
 func (f RequestField) computeValue(timeNow func() time.Time, req *http.Request) string {
@@ -230,7 +237,7 @@ func (f RequestField) computeValue(timeNow func() time.Time, req *http.Request) 
 		return req.Host
 	case URIField:
 		return req.RequestURI
-	case ReqArgsField:
+	case CompactURIField:
 		// Parse all form values.
 		req.FormValue("")
 
@@ -268,7 +275,7 @@ func (f ResponseField) computeValue(timeNow func() time.Time, res *responseLogge
 		return res.Header().Get("Content-Type")
 	case LocationField:
 		return res.Header().Get("Location")
-	case LocationArgsField:
+	case LocationCompactArgsField:
 		splittedQuery := strings.Split(res.Header().Get("Location"), "?")
 		if len(splittedQuery) != 2 {
 			return ""
