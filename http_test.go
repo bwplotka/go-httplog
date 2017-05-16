@@ -40,11 +40,11 @@ func TestLogger_HTTPHandler_RequestFieldsLogged(t *testing.T) {
 	mLogger := new(MockFieldLogger)
 	now := time.Now()
 	mLogger.On("WithFields", Fields{
-		"req_bytes_in": "0",
-		"req_args":     "arg1=...&arg2=...",
-		"req_path":     "/some_endpoint",
-		"req_time":     now.Format(time.RFC3339),
-		"req_method":   "GET",
+		"req_bytes_in":    "0",
+		"req_uri_compact": `arg1="arg1value"&arg2="arg2value"`,
+		"req_path":        "/some_endpoint",
+		"req_time":        now.Format(time.RFC3339),
+		"req_method":      "GET",
 	}).Return(mLogger)
 	mLogger.On("Log", []interface{}{"Received HTTP request"}).Once()
 
@@ -116,11 +116,11 @@ func TestLogger_HTTPHandler_RedirectFieldsLogged(t *testing.T) {
 	mLogger := new(MockFieldLogger)
 	now := time.Now()
 	mLogger.On("WithFields", Fields{
-		"res_status":        "302",
-		"res_bytes_out":     "0",
-		"res_time":          now.Format(time.RFC3339),
-		"res_location_args": "arg1=...&arg2=...",
-		"res_location_host": "http://localhost/wrong_endpoint",
+		"res_status":           "302",
+		"res_bytes_out":        "0",
+		"res_time":             now.Format(time.RFC3339),
+		"res_location_compact": `arg1="arg1value"&arg2="arg2value"`,
+		"res_location_host":    "http://localhost/wrong_endpoint",
 	}).Return(mLogger)
 	mLogger.On("Log", []interface{}{"Redirecting HTTP request"}).Once()
 

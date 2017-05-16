@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -192,7 +193,12 @@ func DefaultResponseOnlyConfig() Config {
 const maxArgsChars = 48
 
 func formatCompactArgs(argQuery string) string {
-	argElems := strings.Split(argQuery, "&")
+	args, err := url.QueryUnescape(argQuery)
+	if err != nil {
+		args = argQuery
+	}
+
+	argElems := strings.Split(args, "&")
 	var shortsArgsOnly []string
 	for _, argElem := range argElems {
 		a := strings.Split(argElem, "=")
