@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Bplotka/go-httplog"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func TestToHTTPFieldLogger_CanBeUsed(t *testing.T) {

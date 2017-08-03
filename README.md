@@ -7,7 +7,7 @@ Robust, smart logger for Golang http request/response.
 It provides way to log in details every request and response with chosen fields. It
 requires any structured logger that fits under `httplog.FieldLogger` interface.
 
-It comes with useful integration with [logrus]("github.com/Sirupsen/logrus"), but it can be extend to use any logger.
+It comes with useful integration with [logrus]("github.com/sirupsen/logrus"), but it can be extend to use any logger.
 It fits into standard `net/http` middleware (`http.Handler`) pattern, but comes also with [echo]("github.com/labstack/echo") integration.
 
 It comes with bunch of configurable fields. Not exhausting list of these:
@@ -42,7 +42,7 @@ import (
     
     "github.com/Bplotka/go-httplog"
     "github.com/Bplotka/go-httplog/logrus"
-    "github.com/Sirupsen/logrus"
+    "github.com/sirupsen/logrus"
 )
 
 func main() {

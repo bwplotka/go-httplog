@@ -2,7 +2,7 @@ package httplogrus
 
 import (
 	"github.com/Bplotka/go-httplog"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 type infoLogger struct {
